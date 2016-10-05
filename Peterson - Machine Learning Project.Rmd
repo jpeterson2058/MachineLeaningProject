@@ -1,0 +1,211 @@
+---
+title: "Machine Learning Project"
+author: "Joshua Peterson"
+date: "10/4/2016"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+## Background
+
+In this project I analyzed data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. This data may have come from IoT, fitness devices such as Jawbone Up, Nike FuelBand and the Fitbit. Each participant was asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The intent of the project is to predict the manner in which each of the participants performed each of the performed excercies.  This variable is the "classe" variable in the training set.
+
+The training data for the project is available at: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data for the project is availabe at:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Study Design
+
+I will be following the standard Prediction Design Framework
+
+1. Define error rate
+2. Splitting the data in to Training, Testing and Validation
+3. Choose features of the Training data set using cross-validation
+4. Choose prediction function of the Training data using cross-validation
+5. If there is no validation apply 1x to test set
+6. If there is validation apply to test set and refine and apply 1x to validation
+
+It appears that we have a relatively large sample size therefore I would like to target the following parameters:
+
+1. 60% training
+2. 20% test
+3. 20% validation
+
+Loading the excercise data.
+```{r setup, include=FALSE}
+train_data = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+summary(train_data)
+```
+
+## Data Splitting
+
+In this data splitting action, I am splitting the data into 60% training set and 40% testing set.
+```{r}
+library(caret); data(train_data)
+inTrain <- createDataPartition(y=train_data$classe,p=0.60, list=FALSE)
+training <- train_data[inTrain,]
+testing <- train_data[-inTrain,]
+dim(training); dim(testing)
+```
+
+## Cleaning the data
+
+Because there are some non-zero values within the data set, we must clean the data set to extract those values.
+```{r}
+train_data_NZV<- nearZeroVar(training, saveMetrics = TRUE)
+```
+
+```{r, echo=FALSE}
+train_data_NZV <- names(training) %in% c("new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+"kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+"max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
+"var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
+"stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
+"kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+"max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
+"kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+"skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+"amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+"skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
+"max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
+"amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
+"avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
+"stddev_yaw_forearm", "var_yaw_forearm")
+training <- training[!train_data_NZV]
+
+dim(training)
+```
+
+Next, because there are data points within the first column that may interfere with my alogorithms, I will remove the first column from the data set
+```{r}
+training<- training[c(-1)]
+```
+
+Next, I will elimiate those variables with an excessive amount of NAs values.
+```{r}
+final_training <- training 
+for(i in 1:length(training)) { 
+        if( sum( is.na( training[, i] ) ) /nrow(training) >= .6 ) { 
+        for(j in 1:length(final_training)) {
+            if( length( grep(names(training[i]), names(final_training)[j]) ) ==1)  {                 final_training <- final_training[ , -j] 
+            }   
+        } 
+    }
+}
+
+dim(final_training)
+```
+
+```{r}
+training<- final_training
+rm(final_training)
+```
+
+I will now perform the same data cleansing process for the testing data that I performed for the training data.
+```{r}
+clean_training<- colnames(training)
+clean_training_2<- colnames(training[, -58])
+testing<- testing[clean_training]
+testing_2<- testing_2[clean_training_2]
+
+dim(testing)
+```
+
+Lastly, to ensure proper function of the Decision Tree analysis, we must coerce the data 
+```{r}
+for (i in 1:length(testing) ) {
+        for(j in 1:length(training)) {
+        if( length( grep(names(training[i]), names(testing)[j]) ) ==1)  {
+            class(testing[j]) <- class(training[i])
+        }      
+    }      
+}
+testing <- rbind(training[2, -58] , testing) 
+testing <- testing[-1,]
+```
+
+## K-Fold Cross Validation
+
+We will then use the K-Fold process to cross-validate the data by splitting the training set in to many, smaller data sets.
+
+Here, I am creating 10 folds and setting a random number seed of 32323 for the study. Each fold has approximately the same number of samples in it.
+```{r}
+set.seed(32323)
+folds <- createFolds(y=train_data$classe,k=10,list=TRUE,returnTrain=TRUE)
+sapply(folds,length)
+folds[[1]][1:10]
+```
+
+Here, I wanted to resample the data set
+```{r resample,dependson="loadPackage"}
+set.seed(32323)
+folds <- createResample(y=train_data$classe,times=10,
+                             list=TRUE)
+sapply(folds,length)
+folds[[1]][1:10]
+```
+
+## Machine learning alogorithm decisioning
+
+First I wanted to determine the optimal machine learning model to use.  The first test I used the Decision Tree approach.  I followed up by testing the Random Forest approach.
+
+### Machine learning using Decision Trees
+
+The first task was to determine model fit.
+```{r, echo=FALSE}
+modelFit <- rpart(classe ~.,data=training, method="class")
+modelFit
+```
+
+Next, construct a Decision Tree graph
+```{r}
+fancyRpartPlot(modelFit)
+```
+
+Next, I used the predict function for model fitting.
+```{r}
+predict_perf<- predict(modelFit, testing, type = "class")
+```
+
+Lastly, I used a confusion matrix to test the results.
+```{r}
+confusionMatrix(predict_perf, testing$classe)
+```
+The output for this approach is not too bad.  Overall model accuracy was 0.86 or 86%.  Within a 95% probability, the model accuracy ranges between 0.85 and 0.87.  This test is confirmed by a p-value < 0.05.
+
+
+## Machine learning using Random Forests
+
+Like the previous analysis, I wanted to determine model fit.  This time instead of using the Decision Tree approach, I used the randomForest function.
+```{r}
+modelFit2<- randomForest(classe ~., data = training)
+```
+
+Next, I wanted to predict the in-sample error.
+```{r}
+predict_perf2<- predict(modelFit2, testing, type = "class")
+```
+
+And once again, the last step was to use a confusion matrix to test results.
+
+
+```{r}
+confusionMatrix(predict_perf2, testing$classe)
+```
+After running the data through the Decision Tree and the Random Forests frameworks, the output suggests that the Random Forest approach is superior with this data set. Model accuracy is 0.9978 or 99.7% with a 95% probability that the model has an accuracy between 0.9965 and 0.9987.  This test is confirmed by a p-value of < 0.05.
+
+Finally, we will use the Random Forest model for prediction
+```{r}
+predict_pef_final<- predict(modelFit2, testing, type = "class")
+```
+
+```{r, echo=FALSE}
+knit("Peterson - Machine Learning Project.Rmd")
+```
