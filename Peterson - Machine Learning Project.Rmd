@@ -41,7 +41,9 @@ It appears that we have a relatively large sample size therefore I would like to
 Loading the excercise data.
 ```{r setup, include=FALSE}
 train_data = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test_data = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
 summary(train_data)
+summary(test_data)
 ```
 
 ## Data Splitting
@@ -60,27 +62,10 @@ dim(training); dim(testing)
 Because there are some non-zero values within the data set, we must clean the data set to extract those values.
 ```{r}
 train_data_NZV<- nearZeroVar(training, saveMetrics = TRUE)
-```
+training<- training[,train_data_NZV$nzv==FALSE]
 
-```{r, echo=FALSE}
-train_data_NZV <- names(training) %in% c("new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
-"kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
-"max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
-"var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
-"stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
-"kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
-"max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
-"kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
-"skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
-"amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
-"skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
-"max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
-"amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
-"avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
-"stddev_yaw_forearm", "var_yaw_forearm")
-training <- training[!train_data_NZV]
-
-dim(training)
+test_data_NZV<- nearZeroVar(testing, saveMetrics = TRUE)
+testing<- testing[, test_data_NZV$nzv==FALSE]
 ```
 
 Next, because there are data points within the first column that may interfere with my alogorithms, I will remove the first column from the data set
@@ -161,7 +146,6 @@ First I wanted to determine the optimal machine learning model to use.  The firs
 The first task was to determine model fit.
 ```{r, echo=FALSE}
 modelFit <- rpart(classe ~.,data=training, method="class")
-modelFit
 ```
 
 Next, construct a Decision Tree graph
@@ -178,8 +162,7 @@ Lastly, I used a confusion matrix to test the results.
 ```{r}
 confusionMatrix(predict_perf, testing$classe)
 ```
-The output for this approach is not too bad.  Overall model accuracy was 0.86 or 86%.  Within a 95% probability, the model accuracy ranges between 0.85 and 0.87.  This test is confirmed by a p-value < 0.05.
-
+The output for this approach is not too bad.  Overall model accuracy was 0.8711 or 87.11%.  Within a 95% probability, the model accuracy ranges between 0.8635 and 0.8785.  This test is confirmed by a p-value < 0.05.
 
 ## Machine learning using Random Forests
 
@@ -199,11 +182,46 @@ And once again, the last step was to use a confusion matrix to test results.
 ```{r}
 confusionMatrix(predict_perf2, testing$classe)
 ```
-After running the data through the Decision Tree and the Random Forests frameworks, the output suggests that the Random Forest approach is superior with this data set. Model accuracy is 0.9978 or 99.7% with a 95% probability that the model has an accuracy between 0.9965 and 0.9987.  This test is confirmed by a p-value of < 0.05.
+Model accuracy is 0.9994 or 99.94% with a 95% probability that the model has an accuracy between 0.9985 and 0.9998.  This test is confirmed by a p-value of < 0.05.
+
+```{r}
+plot(modelFit2)
+```
+
+
+## Machine learning using Boosted Regressions
+
+```{r}
+set.seed(2058)
+fitControl <- trainControl(method = "repeatedcv",number = 5, repeats = 1)
+
+gbmFit <- train(classe ~ ., data=training, method = "gbm",
+                 trControl = fitControl,
+                 verbose = FALSE)
+
+
+gbmFinMod <- gbmFit$finalModel
+
+gbmPredTest <- predict(gbmFit, newdata=testing)
+gbmAccuracyTest <- confusionMatrix(gbmPredTest, testing$classe)
+gbmAccuracyTest
+```
+Model accuracy is 0.996 or 99.6% with a 95% probability that model has an accuracy between 0.9944 and 0.9973.
+
+```{r}
+plot(gbmFit, ylim=c(0.80, 1))
+```
+
+After running the Decision Tree, Random Forest and GBM frameworks, I've come to the conclusion that Random Forests is the optimal approach.
+
+Decision Tree error rate: 12.89%
+Random Forests error rate: 0.06%
+General Boosted Regressions error rate: 0.40%
+
 
 Finally, we will use the Random Forest model for prediction
 ```{r}
-predict_pef_final<- predict(modelFit2, testing, type = "class")
+predict_final<- predict(modelFit2, testing, type = "class")
 ```
 
 ```{r, echo=FALSE}
