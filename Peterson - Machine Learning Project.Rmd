@@ -3,6 +3,7 @@ title: "Machine Learning Project"
 author: "Joshua Peterson"
 date: "10/4/2016"
 output:
+  html_document: default
   pdf_document: default
   word_document: default
 ---
@@ -103,19 +104,6 @@ testing_2<- testing_2[clean_training_2]
 dim(testing)
 ```
 
-Lastly, to ensure proper function of the Decision Tree analysis, we must coerce the data 
-```{r}
-for (i in 1:length(testing) ) {
-        for(j in 1:length(training)) {
-        if( length( grep(names(training[i]), names(testing)[j]) ) ==1)  {
-            class(testing[j]) <- class(training[i])
-        }      
-    }      
-}
-testing <- rbind(training[2, -58] , testing) 
-testing <- testing[-1,]
-```
-
 ## K-Fold Cross Validation
 
 We will then use the K-Fold process to cross-validate the data by splitting the training set in to many, smaller data sets.
@@ -145,6 +133,7 @@ First I wanted to determine the optimal machine learning model to use.  The firs
 
 The first task was to determine model fit.
 ```{r, echo=FALSE}
+library(rpart)
 modelFit <- rpart(classe ~.,data=training, method="class")
 ```
 
